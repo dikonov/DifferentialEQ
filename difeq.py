@@ -187,16 +187,16 @@ class Window(QtWidgets.QDialog):
 			
 			a = self.sp_a.value()
 			b = self.sp_b.value()
+			#get the gain of the filtered  EQ
 			if b:
 				upper = self.sp_b.value()
 				idx1 = (np.abs(self.freqs_av-70)).argmin()
 				idx2 = (np.abs(self.freqs_av-upper)).argmin()
-				#print(upper, self.freqs_av, idx)
 				gain = np.mean(self.av[idx1:idx2])
 			else:
 				gain = np.mean(self.av)
 			self.av -= gain
-			print("gain",gain)
+			
 			#fade out?
 			if a and b:
 				self.av *= np.interp(self.freqs_av, (a, b), (1, 0) )
