@@ -4,7 +4,7 @@ Create nicely averaged EQ curves to match equalization between different audio s
 
 # Installation
 - Install Python 3.6
-- Open the command line. Type `pip install numpy pyqt5 matplotlib`
+- Open the command line (with admin rights). Type `pip install numpy pyqt5 matplotlib pysoundfile`
 - Click the `Clone or Download` button at the right, then `Download ZIP`. Unzip to a folder of your choice.
 
 ![Imgur](https://i.imgur.com/WwVDVi9.jpg)
