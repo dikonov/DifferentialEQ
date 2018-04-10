@@ -173,6 +173,7 @@ class Window(QtWidgets.QDialog):
 		# discards the old graph
 		self.ax.clear()
 		if self.names:
+			#take the average curve of all differential EQs
 			self.av = np.mean(np.asarray(self.eqs), axis=0)
 			
 			freqs_spaced = np.power(2, np.linspace(0, np.log2(self.freqs[-1]), num=2000))
@@ -183,13 +184,27 @@ class Window(QtWidgets.QDialog):
 			#smoothen the curves, and reduce the points with step indexing
 			self.freqs_av = moving_average(freqs_spaced, n=n)[::n//3]
 			self.av = moving_average(self.av, n=n)[::n//3]
+			
 			a = self.sp_a.value()
 			b = self.sp_b.value()
+			if b:
+				upper = self.sp_b.value()
+				idx1 = (np.abs(self.freqs_av-70)).argmin()
+				idx2 = (np.abs(self.freqs_av-upper)).argmin()
+				#print(upper, self.freqs_av, idx)
+				gain = np.mean(self.av[idx1:idx2])
+			else:
+				gain = np.mean(self.av)
+			self.av -= gain
+			print("gain",gain)
+			#fade out?
 			if a and b:
 				self.av *= np.interp(self.freqs_av, (a, b), (1, 0) )
+				
 			#take the average
 			self.ax.semilogx(self.freqs_av, self.av, basex=2, linewidth=2.5)
 			
+			#plot the contributing raw curves
 			for name, eq in zip(self.names, self.eqs):
 				self.ax.semilogx(self.freqs, eq, basex=2, linestyle="dashed", linewidth=.5)
 		# refresh canvas
