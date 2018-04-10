@@ -6,12 +6,10 @@
 import numpy as np
 import soundfile as sf
 import fourier
-import matplotlib.pyplot as plt
 import xml.etree.ElementTree as ET
 import os
 import sys
 from PyQt5 import QtWidgets
-
 from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt4agg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
@@ -104,21 +102,26 @@ class Window(QtWidgets.QDialog):
 
 		# Just some button connected to `plot` method
 		self.b_add = QtWidgets.QPushButton('+')
+		self.b_add.setToolTip("Add a source - reference pair to the list.")
 		self.b_add.clicked.connect(self.add)
 		self.b_delete = QtWidgets.QPushButton('-')
+		self.b_delete.setToolTip("Delete the selected source - reference pair from the list.")
 		self.b_delete.clicked.connect(self.delete)
 		self.b_save = QtWidgets.QPushButton('=')
+		self.b_save.setToolTip("Write the average EQ curve to an XML file.")
 		self.b_save.clicked.connect(self.write)
 		self.sp_a = QtWidgets.QSpinBox()
 		self.sp_a.valueChanged.connect(self.plot)
 		self.sp_a.setRange(0, 22000)
 		self.sp_a.setSingleStep(1000)
 		self.sp_a.setValue(21000)
+		self.sp_a.setToolTip("At this frequency, the EQ still has full influence.")
 		self.sp_b = QtWidgets.QSpinBox()
 		self.sp_b.valueChanged.connect(self.plot)
 		self.sp_b.setRange(0, 22000)
 		self.sp_b.setSingleStep(1000)
 		self.sp_b.setValue(22000)
+		self.sp_b.setToolTip("At this frequency, the effect of the EQ becomes zero.")
 
 		self.listWidget = QtWidgets.QListWidget()
 		
