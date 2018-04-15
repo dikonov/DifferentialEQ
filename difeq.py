@@ -14,21 +14,41 @@ from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt4agg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
 
-def spectrum_from_audio(filename, fft_size=4096, hop=256, start=None, end=None):
+def showdialog(str):
+	msg = QtWidgets.QMessageBox()
+	msg.setIcon(QtWidgets.QMessageBox.Information)
+	msg.setText(str)
+	#msg.setInformativeText("This is additional information")
+	msg.setWindowTitle("Error")
+	#msg.setDetailedText("The details are as follows:")
+	msg.setStandardButtons(QtWidgets.QMessageBox.Ok)
+	retval = msg.exec_()
+   
+def spectrum_from_audio(filename, fft_size=4096, hop=256, channel_mode="L", start=None, end=None):
 	print("reading",filename)
 	soundob = sf.SoundFile(filename)
-	signal = soundob.read(always_2d=True)[:,0]
+	sig = soundob.read(always_2d=True)
 	sr = soundob.samplerate
-	
-	#cut the signal
-	if end:
-		signal = signal[int(start*sr):int(end*sr)]
+	num_channels = sig.shape[1]
+	spectra = []
+	channels = {"L":(0,), "R":(1,), "L+R":(0,1)}
+	for channel in channels[channel_mode]:
+		print("channel",channel)
+		if channel == num_channels:
+			print("not enough channels for L/R comparison  - fallback to mono")
+			channel=0
+		signal = sig[:,channel]
 		
-	#get the magnitude spectrum
-	#avoid divide by 0 error in log
-	imdata = 20 * np.log10(np.abs(fourier.stft(signal, fft_size, hop, "hann")+.0000001))
-
-	return np.mean(imdata, axis=1), sr
+		# #cut the signal
+		# if end:
+			# signal = signal[int(start*sr):int(end*sr)]
+			
+		#get the magnitude spectrum
+		#avoid divide by 0 error in log
+		imdata = 20 * np.log10(np.abs(fourier.stft(signal, fft_size, hop, "hann")+.0000001))
+		spec = np.mean(imdata, axis=1)
+		spectra.append(spec)
+	return np.mean(spectra, axis=0), sr
 
 def indent(e, level=0):
 	i = "\n" + level*"	"
@@ -53,13 +73,14 @@ def write_eq(file_path, freqs, dB):
 		indent(equalizationeffect)
 		tree.write(file_path)
 		
-def get_eq(file_src, file_ref):
+def get_eq(file_src, file_ref, channel_mode):
+	print("Comparing channels:",channel_mode)
 	#get the averaged spectrum for this audio file
 	fft_size=16384
 	hop=8192
 	#todo: set custom times for both, if given
-	spectrum_src, sr_src = spectrum_from_audio(file_src, fft_size, hop)
-	spectrum_ref, sr_ref = spectrum_from_audio(file_ref, fft_size, hop)
+	spectrum_src, sr_src = spectrum_from_audio(file_src, fft_size, hop, channel_mode)
+	spectrum_ref, sr_ref = spectrum_from_audio(file_ref, fft_size, hop, channel_mode)
 
 	freqs = fourier.fft_freqs(fft_size, sr_src)
 	#resample the ref spectrum to match the source
@@ -69,13 +90,16 @@ def get_eq(file_src, file_ref):
 	
 
 def moving_average(a, n=3) :
-    ret = np.cumsum(a, dtype=float)
-    ret[n:] = ret[n:] - ret[:-n]
-    return ret[n - 1:] / n
+	ret = np.cumsum(a, dtype=float)
+	ret[n:] = ret[n:] - ret[:-n]
+	return ret[n - 1:] / n
 	
-class Window(QtWidgets.QDialog):
+class Window(QtWidgets.QMainWindow):
 	def __init__(self, parent=None):
 		super(Window, self).__init__(parent)
+		
+		self.central_widget = QtWidgets.QWidget(self)
+		self.setCentralWidget(self.central_widget)
 		
 		self.setWindowTitle('Differential EQ')
 		self.src_dir = "C:\\"
@@ -122,6 +146,9 @@ class Window(QtWidgets.QDialog):
 		self.sp_b.setSingleStep(1000)
 		self.sp_b.setValue(22000)
 		self.sp_b.setToolTip("At this frequency, the effect of the EQ becomes zero.")
+		self.c_channels = QtWidgets.QComboBox(self)
+		self.c_channels.addItems(list(("L+R","L","R")))
+		self.c_channels.setToolTip("Which channels should be analyzed?")
 
 		self.listWidget = QtWidgets.QListWidget()
 		
@@ -130,14 +157,15 @@ class Window(QtWidgets.QDialog):
 		self.qgrid.setVerticalSpacing(0)
 		self.qgrid.addWidget(self.toolbar, 0, 0, 1, 2)
 		self.qgrid.addWidget(self.canvas, 1, 0, 1, 2)
-		self.qgrid.addWidget(self.listWidget, 2, 0, 5, 1)
+		self.qgrid.addWidget(self.listWidget, 2, 0, 6, 1)
 		self.qgrid.addWidget(self.b_add, 2, 1)
 		self.qgrid.addWidget(self.b_delete, 3, 1)
 		self.qgrid.addWidget(self.b_save, 4, 1)
 		self.qgrid.addWidget(self.sp_a, 5, 1)
 		self.qgrid.addWidget(self.sp_b, 6, 1)
+		self.qgrid.addWidget(self.c_channels, 7, 1)
 		
-		self.setLayout(self.qgrid)
+		self.central_widget.setLayout(self.qgrid)
 		
 		
 	def add(self):
@@ -146,13 +174,17 @@ class Window(QtWidgets.QDialog):
 			self.src_dir, src_name = os.path.split(file_src)
 			file_ref = QtWidgets.QFileDialog.getOpenFileName(self, 'Open Reference', self.ref_dir, "Audio files (*.flac *.wav *.mp3)")[0]
 			if file_ref:
-				self.ref_dir, ref_name = os.path.split(file_ref)
-				eq_name = src_name + " -> " + ref_name
-				self.listWidget.addItem(eq_name)
-				self.freqs, eq = get_eq(file_src, file_ref)
-				self.names.append(eq_name)
-				self.eqs.append( eq )
-				self.plot()
+				try:
+					channel_mode = self.c_channels.currentText()
+					self.ref_dir, ref_name = os.path.split(file_ref)
+					eq_name = src_name +" ("+channel_mode+") -> " + ref_name+" ("+channel_mode+")"
+					self.freqs, eq = get_eq(file_src, file_ref, channel_mode)
+					self.listWidget.addItem(eq_name)
+					self.names.append(eq_name)
+					self.eqs.append( eq )
+					self.plot()
+				except:
+					showdialog("File could not be read!")
 
 		
 	def delete(self):
@@ -179,7 +211,8 @@ class Window(QtWidgets.QDialog):
 			#take the average curve of all differential EQs
 			self.av = np.mean(np.asarray(self.eqs), axis=0)
 			
-			freqs_spaced = np.power(2, np.linspace(0, np.log2(self.freqs[-1]), num=2000))
+			#audacity EQ starts at 20Hz
+			freqs_spaced = np.power(2, np.linspace(np.log2(20), np.log2(self.freqs[-1]), num=2000))
 			#self.av = moving_average(self.av, n=20)
 			self.av = np.interp(freqs_spaced, self.freqs, self.av)
 			
@@ -207,9 +240,11 @@ class Window(QtWidgets.QDialog):
 			#take the average
 			self.ax.semilogx(self.freqs_av, self.av, basex=2, linewidth=2.5)
 			
+			#again, just show from 20Hz
+			from20Hz = (np.abs(self.freqs-20)).argmin()
 			#plot the contributing raw curves
 			for name, eq in zip(self.names, self.eqs):
-				self.ax.semilogx(self.freqs, eq, basex=2, linestyle="dashed", linewidth=.5)
+				self.ax.semilogx(self.freqs[from20Hz:], eq[from20Hz:], basex=2, linestyle="dashed", linewidth=.5)
 		# refresh canvas
 		self.canvas.draw()
 
