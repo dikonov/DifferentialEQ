@@ -149,6 +149,18 @@ class Window(QtWidgets.QMainWindow):
 		self.c_channels = QtWidgets.QComboBox(self)
 		self.c_channels.addItems(list(("L+R","L","R")))
 		self.c_channels.setToolTip("Which channels should be analyzed?")
+		self.out_p = QtWidgets.QSpinBox()
+		self.out_p.valueChanged.connect(self.plot)
+		self.out_p.setRange(20, 2000)
+		self.out_p.setSingleStep(100)
+		self.out_p.setValue(200)
+		self.out_p.setToolTip("Resolution of the output curve.")
+		self.smooth_p = QtWidgets.QSpinBox()
+		self.smooth_p.valueChanged.connect(self.plot)
+		self.smooth_p.setRange(1, 200)
+		self.smooth_p.setSingleStep(10)
+		self.smooth_p.setValue(50)
+		self.smooth_p.setToolTip("Smoothing factor. Hint: Increase this if your sample size is small.")
 
 		self.listWidget = QtWidgets.QListWidget()
 		
@@ -157,13 +169,15 @@ class Window(QtWidgets.QMainWindow):
 		self.qgrid.setVerticalSpacing(0)
 		self.qgrid.addWidget(self.toolbar, 0, 0, 1, 2)
 		self.qgrid.addWidget(self.canvas, 1, 0, 1, 2)
-		self.qgrid.addWidget(self.listWidget, 2, 0, 6, 1)
+		self.qgrid.addWidget(self.listWidget, 2, 0, 8, 1)
 		self.qgrid.addWidget(self.b_add, 2, 1)
 		self.qgrid.addWidget(self.b_delete, 3, 1)
 		self.qgrid.addWidget(self.b_save, 4, 1)
 		self.qgrid.addWidget(self.sp_a, 5, 1)
 		self.qgrid.addWidget(self.sp_b, 6, 1)
 		self.qgrid.addWidget(self.c_channels, 7, 1)
+		self.qgrid.addWidget(self.out_p, 8, 1)
+		self.qgrid.addWidget(self.smooth_p, 9, 1)
 		
 		self.central_widget.setLayout(self.qgrid)
 		
@@ -211,15 +225,21 @@ class Window(QtWidgets.QMainWindow):
 			#take the average curve of all differential EQs
 			self.av = np.mean(np.asarray(self.eqs), axis=0)
 			
+			num_in = 2000
+			
 			#audacity EQ starts at 20Hz
-			freqs_spaced = np.power(2, np.linspace(np.log2(20), np.log2(self.freqs[-1]), num=2000))
+			freqs_spaced = np.power(2, np.linspace(np.log2(20), np.log2(self.freqs[-1]), num=num_in))
 			#self.av = moving_average(self.av, n=20)
 			self.av = np.interp(freqs_spaced, self.freqs, self.av)
 			
-			n = 50
+			#average over n samples, then reduce the step according to the desired output
+			n = self.smooth_p.value()
+			num_out = self.out_p.value()
+			reduction_step = num_in // num_out
+			
 			#smoothen the curves, and reduce the points with step indexing
-			self.freqs_av = moving_average(freqs_spaced, n=n)[::n//3]
-			self.av = moving_average(self.av, n=n)[::n//3]
+			self.freqs_av = moving_average(freqs_spaced, n=n)[::reduction_step]
+			self.av = moving_average(self.av, n=n)[::reduction_step]
 			
 			a = self.sp_a.value()
 			b = self.sp_b.value()
