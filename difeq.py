@@ -183,10 +183,10 @@ class Window(QtWidgets.QMainWindow):
 		
 		
 	def add(self):
-		file_src = QtWidgets.QFileDialog.getOpenFileName(self, 'Open Source', self.src_dir, "Audio files (*.flac *.wav *.mp3)")[0]
+		file_src = QtWidgets.QFileDialog.getOpenFileName(self, 'Open Source', self.src_dir, "Audio files (*.flac *.wav *.ogg *.aiff)")[0]
 		if file_src:
 			self.src_dir, src_name = os.path.split(file_src)
-			file_ref = QtWidgets.QFileDialog.getOpenFileName(self, 'Open Reference', self.ref_dir, "Audio files (*.flac *.wav *.mp3)")[0]
+			file_ref = QtWidgets.QFileDialog.getOpenFileName(self, 'Open Reference', self.ref_dir, "Audio files (*.flac *.wav *.ogg *.aiff)")[0]
 			if file_ref:
 				try:
 					channel_mode = self.c_channels.currentText()
