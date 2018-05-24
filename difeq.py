@@ -9,10 +9,11 @@ import fourier
 import xml.etree.ElementTree as ET
 import os
 import sys
-from PyQt5 import QtWidgets
+from PyQt5 import QtWidgets, QtGui, QtCore
 from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt4agg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
+import matplotlib.pyplot as plt
 
 def showdialog(str):
 	msg = QtWidgets.QMessageBox()
@@ -179,6 +180,7 @@ class Window(QtWidgets.QMainWindow):
 		self.qgrid.addWidget(self.out_p, 8, 1)
 		self.qgrid.addWidget(self.smooth_p, 9, 1)
 		
+		self.colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
 		self.central_widget.setLayout(self.qgrid)
 		
 		
@@ -188,27 +190,31 @@ class Window(QtWidgets.QMainWindow):
 			self.src_dir, src_name = os.path.split(file_src)
 			file_ref = QtWidgets.QFileDialog.getOpenFileName(self, 'Open Reference', self.ref_dir, "Audio files (*.flac *.wav *.ogg *.aiff)")[0]
 			if file_ref:
-				try:
-					channel_mode = self.c_channels.currentText()
-					self.ref_dir, ref_name = os.path.split(file_ref)
-					eq_name = src_name +" ("+channel_mode+") -> " + ref_name+" ("+channel_mode+")"
-					self.freqs, eq = get_eq(file_src, file_ref, channel_mode)
-					self.listWidget.addItem(eq_name)
-					self.names.append(eq_name)
-					self.eqs.append( eq )
-					self.plot()
-				except:
-					showdialog("File could not be read!")
-
+				channel_mode = self.c_channels.currentText()
+				self.ref_dir, ref_name = os.path.split(file_ref)
+				eq_name = src_name +" ("+channel_mode+") -> " + ref_name+" ("+channel_mode+")"
+				self.freqs, eq = get_eq(file_src, file_ref, channel_mode)
+				self.listWidget.addItem(eq_name)
+				self.names.append(eq_name)
+				self.eqs.append( eq )
+				self.update_color(eq_name)
+				self.plot()
+			
+	def update_color(self, eq_name):
+		item = self.listWidget.findItems(eq_name, QtCore.Qt.MatchFixedString)[-1]
+		#don't include the first (blue) -> reserved for the bold line
+		item.setForeground( QtGui.QColor(self.colors[self.names.index(eq_name)+1]) )
 		
 	def delete(self):
 		for item in self.listWidget.selectedItems():
-			print(item.text())
 			for i in reversed(range(0, len(self.names))):
 				if self.names[i] == item.text():
 					self.names.pop(i)
 					self.eqs.pop(i)
 			self.listWidget.takeItem(self.listWidget.row(item))
+		
+		for eq_name in self.names:
+			self.update_color(eq_name)
 		self.plot()
 		
 	def write(self):
