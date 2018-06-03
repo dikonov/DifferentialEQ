@@ -37,19 +37,19 @@ def spectrum_from_audio(filename, fft_size=4096, hop=256, channel_mode="L", star
 		print("channel",channel)
 		if channel == num_channels:
 			print("not enough channels for L/R comparison  - fallback to mono")
-			channel=0
+			break
 		signal = sig[:,channel]
 		
-		# #cut the signal
-		# if end:
-			# signal = signal[int(start*sr):int(end*sr)]
-			
 		#get the magnitude spectrum
 		#avoid divide by 0 error in log
 		imdata = 20 * np.log10(np.abs(fourier.stft(signal, fft_size, hop, "hann")+.0000001))
 		spec = np.mean(imdata, axis=1)
 		spectra.append(spec)
-	return np.mean(spectra, axis=0), sr
+	#pad the data so we can compare this in a stereo setting if required
+	if len(spectra) < 2:
+		spectra.append(spectra[0])
+	# return np.mean(spectra, axis=0), sr
+	return spectra, sr
 
 def indent(e, level=0):
 	i = "\n" + level*"	"
@@ -80,14 +80,14 @@ def get_eq(file_src, file_ref, channel_mode):
 	fft_size=16384
 	hop=8192
 	#todo: set custom times for both, if given
-	spectrum_src, sr_src = spectrum_from_audio(file_src, fft_size, hop, channel_mode)
-	spectrum_ref, sr_ref = spectrum_from_audio(file_ref, fft_size, hop, channel_mode)
+	spectra_src, sr_src = spectrum_from_audio(file_src, fft_size, hop, channel_mode)
+	spectra_ref, sr_ref = spectrum_from_audio(file_ref, fft_size, hop, channel_mode)
 
 	freqs = fourier.fft_freqs(fft_size, sr_src)
 	#resample the ref spectrum to match the source
 	if sr_src != sr_ref:
-		spectrum_ref = np.interp(freqs, fourier.fft_freqs(fft_size, sr_ref), spectrum_ref)
-	return freqs, spectrum_ref-spectrum_src
+		spectra_ref = np.interp(freqs, fourier.fft_freqs(fft_size, sr_ref), spectra_ref)
+	return freqs, np.asarray(spectra_ref)-np.asarray(spectra_src)
 	
 
 def moving_average(a, n=3) :
@@ -219,57 +219,63 @@ class Window(QtWidgets.QMainWindow):
 		
 	def write(self):
 		file_out = QtWidgets.QFileDialog.getSaveFileName(self, 'Save Average EQ', self.out_dir, "XML files (*.xml)")[0]
+		file_base = ".".join(file_out.split(".")[:-1])
 		if file_out:
-			self.out_dir, eq_name = os.path.split(file_out)
-			write_eq(file_out, self.freqs_av, self.av)
-		
+			try:
+				self.out_dir, eq_name = os.path.split(file_out)
+				write_eq(file_base+"_AV.xml", self.freqs_av, np.mean(self.av, axis=0))
+				write_eq(file_base+"_L.xml", self.freqs_av, self.av[0])
+				write_eq(file_base+"_R.xml", self.freqs_av, self.av[1])
+			except PermissionError:
+				showdialog("Could not write files - do you have writing permissions there?")
+	
 	def plot(self):
 
 		# discards the old graph
 		self.ax.clear()
 		if self.names:
-			#take the average curve of all differential EQs
-			self.av = np.mean(np.asarray(self.eqs), axis=0)
-			
 			num_in = 2000
-			
-			#audacity EQ starts at 20Hz
-			freqs_spaced = np.power(2, np.linspace(np.log2(20), np.log2(self.freqs[-1]), num=num_in))
-			#self.av = moving_average(self.av, n=20)
-			self.av = np.interp(freqs_spaced, self.freqs, self.av)
-			
 			#average over n samples, then reduce the step according to the desired output
 			n = self.smooth_p.value()
 			num_out = self.out_p.value()
 			reduction_step = num_in // num_out
+			#take the average curve of all differential EQs
+			av_in = np.mean( np.asarray(self.eqs), axis=0)
+			rolloff_start = self.sp_a.value()
+			rolloff_end = self.sp_b.value()
 			
+			#audacity EQ starts at 20Hz
+			freqs_spaced = np.power(2, np.linspace(np.log2(20), np.log2(self.freqs[-1]), num=num_in))
+			
+			avs = []
 			#smoothen the curves, and reduce the points with step indexing
 			self.freqs_av = moving_average(freqs_spaced, n=n)[::reduction_step]
-			self.av = moving_average(self.av, n=n)[::reduction_step]
+			for channel in (0,1):
+				#interpolate this channel's EQ, then smoothen and reduce keys for this channel
+				avs.append( moving_average(np.interp(freqs_spaced, self.freqs, av_in[channel]), n=n)[::reduction_step] )
+			self.av = np.asarray(avs)
 			
-			a = self.sp_a.value()
-			b = self.sp_b.value()
 			#get the gain of the filtered  EQ
-			if b:
-				upper = self.sp_b.value()
-				idx1 = (np.abs(self.freqs_av-70)).argmin()
-				idx2 = (np.abs(self.freqs_av-upper)).argmin()
-				gain = np.mean(self.av[idx1:idx2])
+			if rolloff_end:
+				idx1 = np.abs(self.freqs_av-70).argmin()
+				idx2 = np.abs(self.freqs_av-rolloff_end).argmin()
+				gain = np.mean(self.av[:,idx1:idx2])
 			else:
 				gain = np.mean(self.av)
 			self.av -= gain
 			
 			#fade out?
-			if a and b:
-				self.av *= np.interp(self.freqs_av, (a, b), (1, 0) )
+			if rolloff_start and rolloff_end:
+				for channel in (0,1):
+					self.av[channel] *= np.interp(self.freqs_av, (rolloff_start, rolloff_end), (1, 0) )
 				
 			#take the average
-			self.ax.semilogx(self.freqs_av, self.av, basex=2, linewidth=2.5)
+			self.ax.semilogx(self.freqs_av, np.mean(self.av, axis=0), basex=2, linewidth=2.5)
 			
 			#again, just show from 20Hz
 			from20Hz = (np.abs(self.freqs-20)).argmin()
 			#plot the contributing raw curves
-			for name, eq in zip(self.names, self.eqs):
+			for name, eq in zip(self.names, np.mean(np.asarray(self.eqs), axis=1)):
 				self.ax.semilogx(self.freqs[from20Hz:], eq[from20Hz:], basex=2, linestyle="dashed", linewidth=.5)
 		# refresh canvas
 		self.canvas.draw()
