@@ -135,33 +135,33 @@ class Window(QtWidgets.QMainWindow):
 		self.b_save = QtWidgets.QPushButton('=')
 		self.b_save.setToolTip("Write the average EQ curve to an XML file.")
 		self.b_save.clicked.connect(self.write)
-		self.sp_a = QtWidgets.QSpinBox()
-		self.sp_a.valueChanged.connect(self.plot)
-		self.sp_a.setRange(0, 22000)
-		self.sp_a.setSingleStep(1000)
-		self.sp_a.setValue(21000)
-		self.sp_a.setToolTip("At this frequency, the EQ still has full influence.")
-		self.sp_b = QtWidgets.QSpinBox()
-		self.sp_b.valueChanged.connect(self.plot)
-		self.sp_b.setRange(0, 22000)
-		self.sp_b.setSingleStep(1000)
-		self.sp_b.setValue(22000)
-		self.sp_b.setToolTip("At this frequency, the effect of the EQ becomes zero.")
+		self.s_rolloff_start = QtWidgets.QSpinBox()
+		self.s_rolloff_start.valueChanged.connect(self.plot)
+		self.s_rolloff_start.setRange(0, 22000)
+		self.s_rolloff_start.setSingleStep(1000)
+		self.s_rolloff_start.setValue(21000)
+		self.s_rolloff_start.setToolTip("At this frequency, the EQ still has full influence.")
+		self.s_rolloff_end = QtWidgets.QSpinBox()
+		self.s_rolloff_end.valueChanged.connect(self.plot)
+		self.s_rolloff_end.setRange(1000, 22000)
+		self.s_rolloff_end.setSingleStep(1000)
+		self.s_rolloff_end.setValue(22000)
+		self.s_rolloff_end.setToolTip("At this frequency, the effect of the EQ becomes zero.")
 		self.c_channels = QtWidgets.QComboBox(self)
 		self.c_channels.addItems(list(("L+R","L","R")))
 		self.c_channels.setToolTip("Which channels should be analyzed?")
-		self.out_p = QtWidgets.QSpinBox()
-		self.out_p.valueChanged.connect(self.plot)
-		self.out_p.setRange(20, 2000)
-		self.out_p.setSingleStep(100)
-		self.out_p.setValue(200)
-		self.out_p.setToolTip("Resolution of the output curve.")
-		self.smooth_p = QtWidgets.QSpinBox()
-		self.smooth_p.valueChanged.connect(self.plot)
-		self.smooth_p.setRange(1, 200)
-		self.smooth_p.setSingleStep(10)
-		self.smooth_p.setValue(50)
-		self.smooth_p.setToolTip("Smoothing factor. Hint: Increase this if your sample size is small.")
+		self.s_output_res = QtWidgets.QSpinBox()
+		self.s_output_res.valueChanged.connect(self.plot)
+		self.s_output_res.setRange(20, 2000)
+		self.s_output_res.setSingleStep(100)
+		self.s_output_res.setValue(200)
+		self.s_output_res.setToolTip("Resolution of the output curve.")
+		self.s_smoothing = QtWidgets.QSpinBox()
+		self.s_smoothing.valueChanged.connect(self.plot)
+		self.s_smoothing.setRange(1, 200)
+		self.s_smoothing.setSingleStep(10)
+		self.s_smoothing.setValue(50)
+		self.s_smoothing.setToolTip("Smoothing factor. Hint: Increase this if your sample size is small.")
 
 		self.listWidget = QtWidgets.QListWidget()
 		
@@ -174,11 +174,11 @@ class Window(QtWidgets.QMainWindow):
 		self.qgrid.addWidget(self.b_add, 2, 1)
 		self.qgrid.addWidget(self.b_delete, 3, 1)
 		self.qgrid.addWidget(self.b_save, 4, 1)
-		self.qgrid.addWidget(self.sp_a, 5, 1)
-		self.qgrid.addWidget(self.sp_b, 6, 1)
+		self.qgrid.addWidget(self.s_rolloff_start, 5, 1)
+		self.qgrid.addWidget(self.s_rolloff_end, 6, 1)
 		self.qgrid.addWidget(self.c_channels, 7, 1)
-		self.qgrid.addWidget(self.out_p, 8, 1)
-		self.qgrid.addWidget(self.smooth_p, 9, 1)
+		self.qgrid.addWidget(self.s_output_res, 8, 1)
+		self.qgrid.addWidget(self.s_smoothing, 9, 1)
 		
 		self.colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
 		self.central_widget.setLayout(self.qgrid)
@@ -236,13 +236,13 @@ class Window(QtWidgets.QMainWindow):
 		if self.names:
 			num_in = 2000
 			#average over n samples, then reduce the step according to the desired output
-			n = self.smooth_p.value()
-			num_out = self.out_p.value()
+			n = self.s_smoothing.value()
+			num_out = self.s_output_res.value()
 			reduction_step = num_in // num_out
 			#take the average curve of all differential EQs
 			av_in = np.mean( np.asarray(self.eqs), axis=0)
-			rolloff_start = self.sp_a.value()
-			rolloff_end = self.sp_b.value()
+			rolloff_start = self.s_rolloff_start.value()
+			rolloff_end = self.s_rolloff_end.value()
 			
 			#audacity EQ starts at 20Hz
 			freqs_spaced = np.power(2, np.linspace(np.log2(20), np.log2(self.freqs[-1]), num=num_in))
@@ -256,18 +256,14 @@ class Window(QtWidgets.QMainWindow):
 			self.av = np.asarray(avs)
 			
 			#get the gain of the filtered  EQ
-			if rolloff_end:
-				idx1 = np.abs(self.freqs_av-70).argmin()
-				idx2 = np.abs(self.freqs_av-rolloff_end).argmin()
-				gain = np.mean(self.av[:,idx1:idx2])
-			else:
-				gain = np.mean(self.av)
+			idx1 = np.abs(self.freqs_av-70).argmin()
+			idx2 = np.abs(self.freqs_av-rolloff_end).argmin()
+			gain = np.mean(self.av[:,idx1:idx2])
 			self.av -= gain
 			
-			#fade out?
-			if rolloff_start and rolloff_end:
-				for channel in (0,1):
-					self.av[channel] *= np.interp(self.freqs_av, (rolloff_start, rolloff_end), (1, 0) )
+			#fade out
+			for channel in (0,1):
+				self.av[channel] *= np.interp(self.freqs_av, (rolloff_start, rolloff_end), (1, 0) )
 				
 			#take the average
 			self.ax.semilogx(self.freqs_av, np.mean(self.av, axis=0), basex=2, linewidth=2.5)
