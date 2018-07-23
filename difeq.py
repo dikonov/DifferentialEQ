@@ -1,8 +1,3 @@
-# take FFT over section of file
-# average into one FFT per file
-# difference to reference
-# average of differences
-
 import numpy as np
 import soundfile as sf
 import fourier
@@ -42,7 +37,7 @@ def spectrum_from_audio(filename, fft_size=4096, hop=256, channel_mode="L", star
 		
 		#get the magnitude spectrum
 		#avoid divide by 0 error in log
-		imdata = 20 * np.log10(np.abs(fourier.stft(signal, fft_size, hop, "hann")+.0000001))
+		imdata = 20 * np.log10(fourier.stft(signal, fft_size, hop, "hann"))
 		spec = np.mean(imdata, axis=1)
 		spectra.append(spec)
 	#pad the data so we can compare this in a stereo setting if required
@@ -89,15 +84,14 @@ def get_eq(file_src, file_ref, channel_mode):
 		spectra_ref = np.interp(freqs, fourier.fft_freqs(fft_size, sr_ref), spectra_ref)
 	return freqs, np.asarray(spectra_ref)-np.asarray(spectra_src)
 	
-
 def moving_average(a, n=3) :
 	ret = np.cumsum(a, dtype=float)
 	ret[n:] = ret[n:] - ret[:-n]
 	return ret[n - 1:] / n
 	
-class Window(QtWidgets.QMainWindow):
+class MainWindow(QtWidgets.QMainWindow):
 	def __init__(self, parent=None):
-		super(Window, self).__init__(parent)
+		super(MainWindow, self).__init__(parent)
 		
 		self.central_widget = QtWidgets.QWidget(self)
 		self.setCentralWidget(self.central_widget)
@@ -113,13 +107,16 @@ class Window(QtWidgets.QMainWindow):
 		self.freqs_av = []
 
 		# a figure instance to plot on
-		self.figure = Figure()
-		# create an axis
-		self.ax = self.figure.add_subplot(111)
-
+		self.fig, self.ax = plt.subplots(nrows=1, ncols=1)
+		
+		# the range is not automatically fixed
+		# self.fig.patch.set_facecolor(SECONDARY.getRgb())
+		# self.ax.set_facecolor(SECONDARY.getRgb())
+		self.fig.patch.set_facecolor((53/255, 53/255, 53/255))
+		self.ax.set_facecolor((35/255, 35/255, 35/255))
 		# this is the Canvas Widget that displays the `figure`
-		# it takes the `figure` instance as a parameter to __init__
-		self.canvas = FigureCanvas(self.figure)
+		# it takes the `fig` instance as a parameter to __init__
+		self.canvas = FigureCanvas(self.fig)
 
 		# this is the Navigation widget
 		# it takes the Canvas widget and a parent
@@ -162,6 +159,13 @@ class Window(QtWidgets.QMainWindow):
 		self.s_smoothing.setSingleStep(10)
 		self.s_smoothing.setValue(50)
 		self.s_smoothing.setToolTip("Smoothing factor. Hint: Increase this if your sample size is small.")
+		
+		self.s_strength = QtWidgets.QSpinBox()
+		self.s_strength.valueChanged.connect(self.plot)
+		self.s_strength.setRange(10, 150)
+		self.s_strength.setSingleStep(10)
+		self.s_strength.setValue(100)
+		self.s_strength.setToolTip("EQ Gain [%]. Adjust the strength of the output EQ curve.")
 
 		self.listWidget = QtWidgets.QListWidget()
 		
@@ -179,6 +183,7 @@ class Window(QtWidgets.QMainWindow):
 		self.qgrid.addWidget(self.c_channels, 7, 1)
 		self.qgrid.addWidget(self.s_output_res, 8, 1)
 		self.qgrid.addWidget(self.s_smoothing, 9, 1)
+		self.qgrid.addWidget(self.s_strength, 10, 1)
 		
 		self.colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
 		self.central_widget.setLayout(self.qgrid)
@@ -259,27 +264,53 @@ class Window(QtWidgets.QMainWindow):
 			idx1 = np.abs(self.freqs_av-70).argmin()
 			idx2 = np.abs(self.freqs_av-rolloff_end).argmin()
 			gain = np.mean(self.av[:,idx1:idx2])
+			strength = self.s_strength.value() / 100
 			self.av -= gain
+			self.av *= strength
 			
 			#fade out
 			for channel in (0,1):
 				self.av[channel] *= np.interp(self.freqs_av, (rolloff_start, rolloff_end), (1, 0) )
 				
-			#take the average
-			self.ax.semilogx(self.freqs_av, np.mean(self.av, axis=0), basex=2, linewidth=2.5)
-			
 			#again, just show from 20Hz
 			from20Hz = (np.abs(self.freqs-20)).argmin()
 			#plot the contributing raw curves
 			for name, eq in zip(self.names, np.mean(np.asarray(self.eqs), axis=1)):
-				self.ax.semilogx(self.freqs[from20Hz:], eq[from20Hz:], basex=2, linestyle="dashed", linewidth=.5)
+				self.ax.semilogx(self.freqs[from20Hz:], eq[from20Hz:], basex=2, linestyle="dashed", linewidth=.5, alpha=.5, color=self.colors[self.names.index(name)+1])
+			#take the average
+			self.ax.semilogx(self.freqs_av, np.mean(self.av, axis=0), basex=2, linewidth=2.5, alpha=1, color= self.colors[0])
 		# refresh canvas
 		self.canvas.draw()
 
+
 if __name__ == '__main__':
-	app = QtWidgets.QApplication(sys.argv)
-
-	main = Window()
-	main.show()
-
-	sys.exit(app.exec_())
+	appQt = QtWidgets.QApplication([])
+	
+	#style
+	appQt.setStyle(QtWidgets.QStyleFactory.create('Fusion'))
+	dark_palette = QtGui.QPalette()
+	WHITE =     QtGui.QColor(255, 255, 255)
+	BLACK =     QtGui.QColor(0, 0, 0)
+	RED =       QtGui.QColor(255, 0, 0)
+	PRIMARY =   QtGui.QColor(53, 53, 53)
+	SECONDARY = QtGui.QColor(35, 35, 35)
+	TERTIARY =  QtGui.QColor(42, 130, 218)
+	dark_palette.setColor(QtGui.QPalette.Window,          PRIMARY)
+	dark_palette.setColor(QtGui.QPalette.WindowText,      WHITE)
+	dark_palette.setColor(QtGui.QPalette.Base,            SECONDARY)
+	dark_palette.setColor(QtGui.QPalette.AlternateBase,   PRIMARY)
+	dark_palette.setColor(QtGui.QPalette.ToolTipBase,     WHITE)
+	dark_palette.setColor(QtGui.QPalette.ToolTipText,     WHITE)
+	dark_palette.setColor(QtGui.QPalette.Text,            WHITE)
+	dark_palette.setColor(QtGui.QPalette.Button,          PRIMARY)
+	dark_palette.setColor(QtGui.QPalette.ButtonText,      WHITE)
+	dark_palette.setColor(QtGui.QPalette.BrightText,      RED)
+	dark_palette.setColor(QtGui.QPalette.Link,            TERTIARY)
+	dark_palette.setColor(QtGui.QPalette.Highlight,       TERTIARY)
+	dark_palette.setColor(QtGui.QPalette.HighlightedText, BLACK)
+	appQt.setPalette(dark_palette)
+	appQt.setStyleSheet("QToolTip { color: #ffffff; background-color: #353535; border: 1px solid white; }")
+	
+	win = MainWindow()
+	win.show()
+	appQt.exec_()
