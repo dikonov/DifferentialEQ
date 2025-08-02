@@ -19,8 +19,9 @@ With this tool, you can sample any number of source > reference pairs. The resul
 - "+" Add a new differential EQ (opens file dialogs to select source and reference file)
 - "-" Delete the selected EQ from the list.
 - "=" Export the current average EQ to an XML file for use in Audacity.
-- The top two numbers fade out the influence of the EQ curve over the given frequencies to avoid boosting the noise floor. Consider this the start and end of your EQ curve's 'rolloff' band.
-- The bottom two numbers control the resolution and smoothing of the curve.
+- The top two numbers fade in the influence of the EQ curve over the given frequencies to avoid boosting the bass or LF noises. Consider this the start and end of your EQ curve's 'rollon' band.
+- The next two numbers fade out the influence of the EQ curve over the given frequencies to avoid boosting the noise floor. Consider this the start and end of your EQ curve's 'rolloff' band.
+- The bottom four numbers control the resolution, smoothing, gain and volume shift of the curve.
 - Select which channels you want to compare for stereo files.
 - nb. See also the tooltips that appear when you keep your mouse over a button.
 
