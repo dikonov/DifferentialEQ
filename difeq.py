@@ -5,8 +5,8 @@ import xml.etree.ElementTree as ET
 import os
 import sys
 from PyQt5 import QtWidgets, QtGui, QtCore
-from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.backends.backend_qt4agg import NavigationToolbar2QT as NavigationToolbar
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 
@@ -56,7 +56,7 @@ def indent(e, level=0):
 	else:
 		if level and (not e.tail or not e.tail.strip()): e.tail = i
 		
-def write_eq(file_path, freqs, dB):
+def write_eq_xml(file_path, freqs, dB):
 		tree=ET.ElementTree()
 		equalizationeffect = ET.Element('equalizationeffect')
 		curve=ET.SubElement(equalizationeffect, 'curve')
@@ -68,6 +68,21 @@ def write_eq(file_path, freqs, dB):
 		tree._setroot(equalizationeffect)
 		indent(equalizationeffect)
 		tree.write(file_path)
+		
+def write_eq(file_path, freqs, dB):
+	eqfile = open(file_path, mode='w', newline=os.linesep)
+	fstr=""
+	vstr=""
+	i = 0
+	for f,d in zip(freqs,dB):
+		i += 1
+	for f,d in zip(freqs,dB):
+		i = i-1
+		fstr = "f" + str(i) + "=\"" + str(f) + "\" " + fstr
+		vstr = "v" + str(i) + "=\"" + str(d) + "\" " + vstr
+	print("FilterCurve:" + fstr + "filterLength=\"8191\" InterpolateLin=\"0\" InterpolationMethod=\"B-spline\" " + vstr, file=eqfile)
+	eqfile.flush()
+	eqfile.close()
 		
 def get_eq(file_src, file_ref, channel_mode):
 	print("Comparing channels:",channel_mode)
@@ -97,9 +112,9 @@ class MainWindow(QtWidgets.QMainWindow):
 		self.setCentralWidget(self.central_widget)
 		
 		self.setWindowTitle('Differential EQ')
-		self.src_dir = "C:\\"
-		self.ref_dir = "C:\\"
-		self.out_dir = "C:\\"
+		self.src_dir = "/home"
+		self.ref_dir = "/home"
+		self.out_dir = "/home"
 		self.names = []
 		self.freqs = []
 		self.eqs = []
@@ -132,6 +147,20 @@ class MainWindow(QtWidgets.QMainWindow):
 		self.b_save = QtWidgets.QPushButton('=')
 		self.b_save.setToolTip("Write the average EQ curve to an XML file.")
 		self.b_save.clicked.connect(self.write)
+
+		self.s_rollon_start = QtWidgets.QSpinBox()
+		self.s_rollon_start.valueChanged.connect(self.plot)
+		self.s_rollon_start.setRange(0, 22000)
+		self.s_rollon_start.setSingleStep(10)
+		self.s_rollon_start.setValue(0)
+		self.s_rollon_start.setToolTip("At this frequency, the EQ starts to have effect.")
+		self.s_rollon_end = QtWidgets.QSpinBox()
+		self.s_rollon_end.valueChanged.connect(self.plot)
+		self.s_rollon_end.setRange(0, 22000)
+		self.s_rollon_end.setSingleStep(10)
+		self.s_rollon_end.setValue(20)
+		self.s_rollon_end.setToolTip("At this frequency, the EQ already has full influence.")
+
 		self.s_rolloff_start = QtWidgets.QSpinBox()
 		self.s_rolloff_start.valueChanged.connect(self.plot)
 		self.s_rolloff_start.setRange(0, 22000)
@@ -144,6 +173,8 @@ class MainWindow(QtWidgets.QMainWindow):
 		self.s_rolloff_end.setSingleStep(1000)
 		self.s_rolloff_end.setValue(22000)
 		self.s_rolloff_end.setToolTip("At this frequency, the effect of the EQ becomes zero.")
+
+
 		self.c_channels = QtWidgets.QComboBox(self)
 		self.c_channels.addItems(list(("L+R","L","R")))
 		self.c_channels.setToolTip("Which channels should be analyzed?")
@@ -167,23 +198,34 @@ class MainWindow(QtWidgets.QMainWindow):
 		self.s_strength.setValue(100)
 		self.s_strength.setToolTip("EQ Gain [%]. Adjust the strength of the output EQ curve.")
 
+		self.s_vol = QtWidgets.QSpinBox()
+		self.s_vol.valueChanged.connect(self.plot)
+		self.s_vol.setRange(-30, 30)
+		self.s_vol.setSingleStep(1)
+		self.s_vol.setValue(0)
+		self.s_vol.setToolTip("EQ Gain [%]. Uniformly shift all points of the EQ curve up or down.")
+
+
 		self.listWidget = QtWidgets.QListWidget()
 		
 		self.qgrid = QtWidgets.QGridLayout()
-		self.qgrid.setHorizontalSpacing(0)
-		self.qgrid.setVerticalSpacing(0)
+		self.qgrid.setHorizontalSpacing(5)
+		self.qgrid.setVerticalSpacing(5)
 		self.qgrid.addWidget(self.toolbar, 0, 0, 1, 2)
 		self.qgrid.addWidget(self.canvas, 1, 0, 1, 2)
-		self.qgrid.addWidget(self.listWidget, 2, 0, 8, 1)
+		self.qgrid.addWidget(self.listWidget, 2, 0, 13, 1)
 		self.qgrid.addWidget(self.b_add, 2, 1)
 		self.qgrid.addWidget(self.b_delete, 3, 1)
 		self.qgrid.addWidget(self.b_save, 4, 1)
-		self.qgrid.addWidget(self.s_rolloff_start, 5, 1)
-		self.qgrid.addWidget(self.s_rolloff_end, 6, 1)
-		self.qgrid.addWidget(self.c_channels, 7, 1)
-		self.qgrid.addWidget(self.s_output_res, 8, 1)
-		self.qgrid.addWidget(self.s_smoothing, 9, 1)
-		self.qgrid.addWidget(self.s_strength, 10, 1)
+		self.qgrid.addWidget(self.s_rollon_start, 5, 1)
+		self.qgrid.addWidget(self.s_rollon_end, 6, 1)
+		self.qgrid.addWidget(self.s_rolloff_start, 7, 1)
+		self.qgrid.addWidget(self.s_rolloff_end, 8, 1)
+		self.qgrid.addWidget(self.c_channels, 9, 1)
+		self.qgrid.addWidget(self.s_output_res, 10, 1)
+		self.qgrid.addWidget(self.s_smoothing, 11, 1)
+		self.qgrid.addWidget(self.s_strength, 12, 1)
+		self.qgrid.addWidget(self.s_vol, 13, 1)
 		
 		self.colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
 		self.central_widget.setLayout(self.qgrid)
@@ -223,14 +265,19 @@ class MainWindow(QtWidgets.QMainWindow):
 		self.plot()
 		
 	def write(self):
-		file_out = QtWidgets.QFileDialog.getSaveFileName(self, 'Save Average EQ', self.out_dir, "XML files (*.xml)")[0]
+		(file_out, fltr) = QtWidgets.QFileDialog.getSaveFileName(self, 'Save Average EQ', self.out_dir, "TXT files (*.txt);;XML files (*.xml)")
 		file_base = ".".join(file_out.split(".")[:-1])
 		if file_out:
 			try:
 				self.out_dir, eq_name = os.path.split(file_out)
-				write_eq(file_base+"_AV.xml", self.freqs_av, np.mean(self.av, axis=0))
-				write_eq(file_base+"_L.xml", self.freqs_av, self.av[0])
-				write_eq(file_base+"_R.xml", self.freqs_av, self.av[1])
+				if fltr == "TXT files (*.txt)": 
+					write_eq(file_base+".txt", self.freqs_av, np.mean(self.av, axis=0))
+					write_eq(file_base+"_L.txt", self.freqs_av, self.av[0])
+					write_eq(file_base+"_R.txt", self.freqs_av, self.av[1])
+				elif fltr == "XML files (*.xml)":
+					write_eq_xml(file_base+".xml", self.freqs_av, np.mean(self.av, axis=0))
+					write_eq_xml(file_base+"_L.xml", self.freqs_av, self.av[0])
+					write_eq_xml(file_base+"_R.xml", self.freqs_av, self.av[1])
 			except PermissionError:
 				showdialog("Could not write files - do you have writing permissions there?")
 	
@@ -246,6 +293,8 @@ class MainWindow(QtWidgets.QMainWindow):
 			reduction_step = num_in // num_out
 			#take the average curve of all differential EQs
 			av_in = np.mean( np.asarray(self.eqs), axis=0)
+			rollon_end = self.s_rollon_end.value()
+			rollon_start = self.s_rollon_start.value()
 			rolloff_start = self.s_rolloff_start.value()
 			rolloff_end = self.s_rolloff_end.value()
 			
@@ -267,18 +316,26 @@ class MainWindow(QtWidgets.QMainWindow):
 			strength = self.s_strength.value() / 100
 			self.av -= gain
 			self.av *= strength
+			shift = self.s_vol.value()
+			self.av += shift
 			
+			
+			#fade in
+			for channel in (0,1):
+				self.av[channel] *= np.interp(self.freqs_av, (rollon_start, rollon_end), (0, 1) )
+
 			#fade out
 			for channel in (0,1):
 				self.av[channel] *= np.interp(self.freqs_av, (rolloff_start, rolloff_end), (1, 0) )
+
 				
 			#again, just show from 20Hz
 			from20Hz = (np.abs(self.freqs-20)).argmin()
 			#plot the contributing raw curves
 			for name, eq in zip(self.names, np.mean(np.asarray(self.eqs), axis=1)):
-				self.ax.semilogx(self.freqs[from20Hz:], eq[from20Hz:], basex=2, linestyle="dashed", linewidth=.5, alpha=.5, color=self.colors[self.names.index(name)+1])
+				self.ax.semilogx(self.freqs[from20Hz:], eq[from20Hz:], base=2, linestyle="dashed", linewidth=.5, alpha=.5, color=self.colors[self.names.index(name)+1])
 			#take the average
-			self.ax.semilogx(self.freqs_av, np.mean(self.av, axis=0), basex=2, linewidth=2.5, alpha=1, color= self.colors[0])
+			self.ax.semilogx(self.freqs_av, np.mean(self.av, axis=0), base=2, linewidth=2.5, alpha=1, color= self.colors[0])
 		# refresh canvas
 		self.canvas.draw()
 
