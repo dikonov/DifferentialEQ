@@ -5,8 +5,8 @@ import xml.etree.ElementTree as ET
 import os
 import sys
 from PyQt5 import QtWidgets, QtGui, QtCore
-from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.backends.backend_qt4agg import NavigationToolbar2QT as NavigationToolbar
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 
@@ -56,7 +56,7 @@ def indent(e, level=0):
 	else:
 		if level and (not e.tail or not e.tail.strip()): e.tail = i
 		
-def write_eq(file_path, freqs, dB):
+def write_eq_xml(file_path, freqs, dB):
 		tree=ET.ElementTree()
 		equalizationeffect = ET.Element('equalizationeffect')
 		curve=ET.SubElement(equalizationeffect, 'curve')
@@ -68,6 +68,21 @@ def write_eq(file_path, freqs, dB):
 		tree._setroot(equalizationeffect)
 		indent(equalizationeffect)
 		tree.write(file_path)
+		
+def write_eq(file_path, freqs, dB):
+	eqfile = open(file_path, mode='w', newline=os.linesep)
+	fstr=""
+	vstr=""
+	i = 0
+	for f,d in zip(freqs,dB):
+		i += 1
+	for f,d in zip(freqs,dB):
+		i = i-1
+		fstr = "f" + str(i) + "=\"" + str(f) + "\" " + fstr
+		vstr = "v" + str(i) + "=\"" + str(d) + "\" " + vstr
+	print("FilterCurve:" + fstr + "filterLength=\"8191\" InterpolateLin=\"0\" InterpolationMethod=\"B-spline\" " + vstr, file=eqfile)
+	eqfile.flush()
+	eqfile.close()
 		
 def get_eq(file_src, file_ref, channel_mode):
 	print("Comparing channels:",channel_mode)
@@ -97,9 +112,9 @@ class MainWindow(QtWidgets.QMainWindow):
 		self.setCentralWidget(self.central_widget)
 		
 		self.setWindowTitle('Differential EQ')
-		self.src_dir = "C:\\"
-		self.ref_dir = "C:\\"
-		self.out_dir = "C:\\"
+		self.src_dir = "/home"
+		self.ref_dir = "/home"
+		self.out_dir = "/home"
 		self.names = []
 		self.freqs = []
 		self.eqs = []
@@ -223,14 +238,19 @@ class MainWindow(QtWidgets.QMainWindow):
 		self.plot()
 		
 	def write(self):
-		file_out = QtWidgets.QFileDialog.getSaveFileName(self, 'Save Average EQ', self.out_dir, "XML files (*.xml)")[0]
+		(file_out, fltr) = QtWidgets.QFileDialog.getSaveFileName(self, 'Save Average EQ', self.out_dir, "TXT files (*.txt);;XML files (*.xml)")
 		file_base = ".".join(file_out.split(".")[:-1])
 		if file_out:
 			try:
 				self.out_dir, eq_name = os.path.split(file_out)
-				write_eq(file_base+"_AV.xml", self.freqs_av, np.mean(self.av, axis=0))
-				write_eq(file_base+"_L.xml", self.freqs_av, self.av[0])
-				write_eq(file_base+"_R.xml", self.freqs_av, self.av[1])
+				if fltr == "TXT files (*.txt)": 
+					write_eq(file_base+".txt", self.freqs_av, np.mean(self.av, axis=0))
+					write_eq(file_base+"_L.txt", self.freqs_av, self.av[0])
+					write_eq(file_base+"_R.txt", self.freqs_av, self.av[1])
+				elif fltr == "XML files (*.xml)":
+					write_eq_xml(file_base+".xml", self.freqs_av, np.mean(self.av, axis=0))
+					write_eq_xml(file_base+"_L.xml", self.freqs_av, self.av[0])
+					write_eq_xml(file_base+"_R.xml", self.freqs_av, self.av[1])
 			except PermissionError:
 				showdialog("Could not write files - do you have writing permissions there?")
 	
@@ -276,9 +296,9 @@ class MainWindow(QtWidgets.QMainWindow):
 			from20Hz = (np.abs(self.freqs-20)).argmin()
 			#plot the contributing raw curves
 			for name, eq in zip(self.names, np.mean(np.asarray(self.eqs), axis=1)):
-				self.ax.semilogx(self.freqs[from20Hz:], eq[from20Hz:], basex=2, linestyle="dashed", linewidth=.5, alpha=.5, color=self.colors[self.names.index(name)+1])
+				self.ax.semilogx(self.freqs[from20Hz:], eq[from20Hz:], base=2, linestyle="dashed", linewidth=.5, alpha=.5, color=self.colors[self.names.index(name)+1])
 			#take the average
-			self.ax.semilogx(self.freqs_av, np.mean(self.av, axis=0), basex=2, linewidth=2.5, alpha=1, color= self.colors[0])
+			self.ax.semilogx(self.freqs_av, np.mean(self.av, axis=0), base=2, linewidth=2.5, alpha=1, color= self.colors[0])
 		# refresh canvas
 		self.canvas.draw()
 
